@@ -2,14 +2,13 @@
 
 ## Fixed Issues
 
-### 1. ✅ Account Creation Vulnerability (FIXED)
-**Problem:** Anyone could create an account with any email and gain full access to the system.
+### 1. ✅ Role-Based Access (UPDATED)
+**Current Behavior:** Any Firebase-authenticated user can log in, but only authorized staff emails can access inventory/menu/analytics management.
 
 **Solution Implemented:**
-- ❌ Removed "Create Account" button from login UI
-- ✅ Added email whitelist validation (2 authorized emails only)
-- ✅ Client-side check in `loginUser()` prevents non-whitelisted emails
-- ✅ Server-side check in `initAuthUI()` auto-signs out unauthorized users
+- ✅ Any signed-in user gets customer ordering access
+- ✅ Authorized staff emails get full management access
+- ✅ Frontend role checks + Firestore rules enforce restricted writes for inventory/menu/analytics
 
 **`AUTHORIZED_EMAILS` whitelist:**
 ```javascript
@@ -31,7 +30,9 @@ const AUTHORIZED_EMAILS = [
 
 ## How to Add New Authorized Staff
 
-Since users **cannot create accounts** via the login page, you must create new staff accounts in **Firebase Console**:
+You must create staff accounts in **Firebase Console**, then add their email to both:
+1. `AUTHORIZED_EMAILS` in `index.html`
+2. `isStaff()` list in `firestore.rules`
 
 ### Steps:
 1. Go to [Firebase Console](https://console.firebase.google.com/)
@@ -63,26 +64,20 @@ Since users **cannot create accounts** via the login page, you must create new s
 
 ## ⚠️ CRITICAL: Deploy Firestore Rules
 
-**Current Status:** Firestore rules are NOT YET deployed. Without them, anyone with a valid Firebase token can read/write data.
+Without deployed rules, client-side checks alone are not enough.
 
 ### To Deploy Rules:
 
 1. Open [Firebase Console](https://console.firebase.google.com/)
 2. Go to **Firestore Database** → **Rules** tab
-3. Replace ALL content with these rules:
+3. Paste the contents of `firestore.rules` from this project.
 
 ```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Only allow authorized staff
-    match /restaurants/main/{document=**} {
-      allow read, write: if request.auth != null && 
-        (request.auth.token.email == 'sharunandha21@gmail.com' || 
-         request.auth.token.email == 'admin321@restaurant.com');
-    }
-  }
-}
+Or deploy directly via CLI:
+
+```bash
+firebase deploy --only firestore:rules
+```
 ```
 
 4. Click **Publish**
@@ -93,17 +88,15 @@ service cloud.firestore {
 ## How It Works Now
 
 ```
-User tries to login
-    ↓
-JavaScript checks whitelist (client-side) ❌ → "Email not authorized"
-    ↓ ✅ Email is authorized
-Firebase.auth().createUserWithEmailAndPassword()
-    ↓
-initAuthUI() fires onAuthStateChanged()
-    ↓
-JavaScript rechecks whitelist (server-side) ❌ → Auto sign-out
-    ↓ ✅ Email is authorized
-UI Unlocked → Access granted
+User signs in with Firebase email/password
+  ↓
+UI role assigned:
+  - authorized email -> staff mode
+  - other signed-in email -> customer mode
+  ↓
+Firestore rules enforce:
+  - orders create/update allowed for any signed-in user
+  - inventory/menu/analytics writes allowed only for staff emails
 ```
 
 ---

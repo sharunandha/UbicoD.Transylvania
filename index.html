@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Restaurant - IoT Kitchen Display System</title>
+    <title>Ubico D. Transylvania - Smart Kitchen</title>
+    <link rel="icon" type="image/png" href="logo-u.png">
     <link rel="stylesheet" href="styles.css">
     
     <!-- Firebase SDK (compat for global firebase object) -->
@@ -11,12 +12,13 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
     <div id="auth-overlay" class="auth-overlay" aria-live="polite">
         <div class="auth-card">
-            <h2>🔒 Staff Login</h2>
-            <p class="auth-subtitle">Sign in to manage orders, inventory, and reports.</p>
+            <h2>🔐 Login</h2>
+            <p class="auth-subtitle">Sign in with Firebase email/password. Staff emails get full access. Other users can place orders only.</p>
             <div class="auth-form">
                 <label for="auth-email">Email</label>
                 <input type="email" id="auth-email" placeholder="name@restaurant.com" autocomplete="email">
@@ -34,16 +36,21 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>🍽️ Smart Restaurant</h1>
-            <p class="subtitle">IoT-Powered Ordering System</p>
+            <div class="header-brand">
+                <img src="logo-u.png" alt="Ubico D. Transylvania" class="header-logo">
+                <div class="header-text">
+                    <h1>Ubico D. Transylvania</h1>
+                    <p class="subtitle">Fresh Flavors, Smart Kitchen Flow</p>
+                </div>
+            </div>
         </header>
 
-        <!-- ESP32 Configuration Panel -->
+        <!-- Backend and Display Configuration Panel -->
         <div class="config-panel">
-            <h3>⚙️ Kitchen Display Settings</h3>
+            <h3>⚙️ Backend & Kitchen Display Settings</h3>
             <div class="config-row">
-                <label for="esp32-ip">ESP32 IP Address:</label>
-                <input type="text" id="esp32-ip" placeholder="192.168.1.100" value="192.168.1.100">
+                <label for="backend-url">Backend Server URL:</label>
+                <input type="text" id="backend-url" placeholder="http://localhost:8080" value="http://localhost:8080">
             </div>
             <div class="config-row">
                 <label for="table-number">Table Number:</label>
@@ -51,10 +58,12 @@
             </div>
             <div class="config-actions">
                 <button class="btn-test" onclick="testConnection()">Test Connection</button>
-                <button class="btn-inventory" onclick="openInventoryDashboard()">📦 Manage Inventory</button>
-                <button class="btn-analytics" onclick="openAnalyticsDashboard()">📊 Analytics & Reports</button>
+                <button class="btn-inventory staff-only" onclick="openInventoryDashboard()">📦 Manage Inventory</button>
+                <button class="btn-analytics staff-only" onclick="openAnalyticsDashboard()">📊 Analytics & Reports</button>
+                <button class="btn-orders staff-only" onclick="openOrderManagement()">📝 Manage Orders</button>
                 <button class="btn-secondary btn-logout" id="btn-logout" onclick="logoutUser()">Sign Out</button>
                 <span id="auth-status" class="auth-status"></span>
+                <span id="user-role-badge" class="role-badge"></span>
                 <span id="connection-status"></span>
             </div>
         </div>
@@ -65,6 +74,13 @@
         <!-- Menu Section -->
         <div class="menu-container">
             <h2>📋 Menu</h2>
+
+            <div class="menu-tools">
+                <div id="category-filters" class="category-filters"></div>
+                <div class="menu-search-box">
+                    <input type="search" id="menu-search" placeholder="Search menu items..." oninput="applyMenuSearchAndFilters()">
+                </div>
+            </div>
 
             <!-- Beverages -->
             <div class="category">
@@ -289,39 +305,37 @@
             </div>
         </div>
 
-        <!-- Sticky Cart Bar -->
-        <div class="cart-bar" id="cart-bar">
+        <!-- Swiggy-style Slide-up Cart Drawer -->
+        <div class="cart-bar" id="cart-bar" onclick="openCartDrawer()">
             <div class="cart-summary">
                 <span class="cart-count">🛒 <span id="total-items">0</span> Items</span>
                 <span class="cart-total">Total: ₹<span id="total-amount">0</span></span>
             </div>
-            <button class="btn-checkout" onclick="openCheckout()">View Cart</button>
+            <button class="btn-checkout">View Cart →</button>
         </div>
 
-        <!-- Checkout Modal -->
-        <div class="modal" id="checkout-modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2>🛒 Your Order</h2>
-                    <button class="btn-close" onclick="closeCheckout()">✕</button>
-                </div>
-                <div class="modal-body">
-                    <div id="cart-items"></div>
-                    <div class="order-summary">
-                        <div class="summary-row">
-                            <span>Total Items:</span>
-                            <span id="checkout-total-items">0</span>
-                        </div>
-                        <div class="summary-row grand-total">
-                            <span>Grand Total:</span>
-                            <span>₹<span id="checkout-total-amount">0</span></span>
-                        </div>
+        <div class="cart-drawer-overlay" id="cart-drawer-overlay" onclick="closeCartDrawer()"></div>
+        <div class="cart-drawer" id="cart-drawer">
+            <div class="cart-drawer-header">
+                <h2>🛒 Your Cart</h2>
+                <button class="btn-close" onclick="closeCartDrawer()">✕</button>
+            </div>
+            <div class="cart-drawer-body" id="cart-drawer-body">
+                <div class="cart-empty" id="cart-empty-msg">Your cart is empty. Add items from the menu!</div>
+                <div id="cart-drawer-items"></div>
+            </div>
+            <div class="cart-drawer-footer" id="cart-drawer-footer">
+                <div class="cart-drawer-totals">
+                    <div class="drawer-total-row">
+                        <span>Items</span>
+                        <span id="drawer-total-items">0</span>
+                    </div>
+                    <div class="drawer-total-row drawer-grand-total">
+                        <span>Total</span>
+                        <span>₹<span id="drawer-total-amount">0</span></span>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button class="btn-secondary" onclick="closeCheckout()">Continue Shopping</button>
-                    <button class="btn-primary" onclick="confirmOrder()">📤 Send to Kitchen</button>
-                </div>
+                <button class="btn-send-kitchen" onclick="confirmOrder()">📤 Send to Kitchen</button>
             </div>
         </div>
 
@@ -339,6 +353,42 @@
                 </div>
                 <div class="modal-footer">
                     <button class="btn-primary" onclick="closeConfirmation()">New Order</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment Modal -->
+        <div class="modal" id="payment-modal">
+            <div class="modal-content modal-medium">
+                <div class="modal-header">
+                    <h2>💳 Complete Payment</h2>
+                    <button class="btn-close" onclick="closePaymentModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="payment-layout">
+                        <div class="payment-qr-box">
+                            <img id="payment-qr-image" alt="Payment QR code">
+                            <p id="payment-upi-text" class="payment-upi-text"></p>
+                            <p class="payment-help">Scan and pay the exact bill amount.</p>
+                        </div>
+                        <div class="payment-details">
+                            <h3>Order Summary</h3>
+                            <div id="payment-order-summary" class="payment-order-summary"></div>
+                            <div class="payment-auth-box">
+                                <h4>Payment Authentication</h4>
+                                <label for="payment-payer-name">Name</label>
+                                <input type="text" id="payment-payer-name" placeholder="Customer name">
+                                <label for="payment-payer-email">Email</label>
+                                <input type="email" id="payment-payer-email" placeholder="customer@email.com">
+                                <label for="payment-ref">UPI/Transaction Ref</label>
+                                <input type="text" id="payment-ref" placeholder="12-digit UTR or txn ref">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="closePaymentModal()">Cancel</button>
+                    <button class="btn-primary" onclick="verifyPaymentAndGenerateBill()">✅ Verify Payment & Download Bill PDF</button>
                 </div>
             </div>
         </div>
@@ -568,6 +618,27 @@
             </div>
         </div>
 
+        <!-- Staff Order Management Modal -->
+        <div class="modal" id="order-mgmt-modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>📝 Manage Orders</h2>
+                    <button class="btn-close" onclick="closeOrderManagement()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="order-mgmt-controls">
+                        <button class="btn-secondary" onclick="loadOrderManagement()">🔄 Refresh</button>
+                    </div>
+                    <div class="order-mgmt-list" id="order-mgmt-list">
+                        <p class="order-mgmt-empty">No orders found.</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-primary" onclick="closeOrderManagement()">Close</button>
+                </div>
+            </div>
+        </div>
+
     <script>
         // ===================================
         // COMPLETE RESTAURANT MANAGEMENT SYSTEM
@@ -597,6 +668,22 @@
         let cart = {};
         let inventory = {};
         let lastLocalInventoryUpdate = 0;
+        let currentUserRole = 'guest';
+        let pendingPaymentOrder = null;
+        let activeCategoryFilter = 'all';
+        let fullMenuCatalog = {};
+
+        const PAYMENT_CONFIG = {
+            upiId: 'sharunandha21@okaxis',
+            payeeName: 'Ubico D. Transylvania',
+            baseQrUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=',
+            // Optional: set this to your uploaded image path to use your own static QR image.
+            qrImagePath: 'payment-qr.png'
+        };
+
+        const APP_CONFIG = {
+            backendUrl: 'http://localhost:8080'
+        };
 
         const defaultInventory = {
             "Tea": { currentStock: 100, unit: "cups", lowThreshold: 20, criticalThreshold: 5, category: "Beverages" },
@@ -617,6 +704,210 @@
             "Porota (Plate)": { currentStock: 40, unit: "plates", lowThreshold: 10, criticalThreshold: 3, category: "Tiffin/Meals" },
             "Meals": { currentStock: 30, unit: "plates", lowThreshold: 8, criticalThreshold: 2, category: "Tiffin/Meals" }
         };
+
+        const ADDITIONAL_MENU_ITEMS = [
+            { name: "Chicken Kuzhi Mandi", price: 290, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Mutton Kuzhi Mandi", price: 390, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Chicken Kuzhi Mandi (Full)", price: 1240, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Raan Kuzhi Mandi (Full)", price: 1770, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Family Bucket Chicken Briyani (5)", price: 1250, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Family Bucket Mutton Briyani (5)", price: 1750, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Party Bucket Chicken Briyani (10)", price: 2490, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Party Bucket Mutton Briyani (10)", price: 3490, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Plain Briyani", price: 190, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Egg Briyani", price: 210, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Veg Briyani", price: 210, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Chicken Briyani", price: 240, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Mutton Briyani", price: 340, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Natukozhi Briyani", price: 310, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Kaadai Briyani", price: 310, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Fish Briyani", price: 350, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Prawn Briyani", price: 350, category: "Arabic Kuzhi Mandhi & Dhum Briyani" },
+            { name: "Chicken 65", price: 165, category: "Starters (Chicken & Kaadai)" },
+            { name: "Chicken 65 (Boneless)", price: 200, category: "Starters (Chicken & Kaadai)" },
+            { name: "Chicken Lollypop", price: 180, category: "Starters (Chicken & Kaadai)" },
+            { name: "Chinese Lollypop", price: 200, category: "Starters (Chicken & Kaadai)" },
+            { name: "Zero Five Chicken", price: 290, category: "Starters (Chicken & Kaadai)" },
+            { name: "Crispy Chicken", price: 320, category: "Starters (Chicken & Kaadai)" },
+            { name: "Dragon Chicken", price: 270, category: "Starters (Chicken & Kaadai)" },
+            { name: "Morocco Chicken", price: 300, category: "Starters (Chicken & Kaadai)" },
+            { name: "Chicken 90", price: 245, category: "Starters (Chicken & Kaadai)" },
+            { name: "Hungarian Chicken", price: 290, category: "Starters (Chicken & Kaadai)" },
+            { name: "Chicken Finger", price: 260, category: "Starters (Chicken & Kaadai)" },
+            { name: "Box Full Chicken", price: 995, category: "Starters (Chicken & Kaadai)" },
+            { name: "Kaadai Masala", price: 190, category: "Starters (Chicken & Kaadai)" },
+            { name: "Kaadai Chettinadu", price: 200, category: "Starters (Chicken & Kaadai)" },
+            { name: "Kaadai 65", price: 175, category: "Starters (Chicken & Kaadai)" },
+            { name: "Kaadai Pepper Fry", price: 195, category: "Starters (Chicken & Kaadai)" },
+            { name: "Tandoori Chicken (Full)", price: 490, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Tandoori Chicken (Half)", price: 270, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Tandoori Chicken (Quarter)", price: 145, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Grill Chicken (Full)", price: 520, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Grill Chicken (Half)", price: 280, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Grill Chicken (Quarter)", price: 150, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Al-Faham BBQ (Full)", price: 540, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Al-Faham BBQ (Half)", price: 290, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Al-Faham BBQ (Quarter)", price: 160, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Shawarma Roll", price: 90, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Tangiri Kabab", price: 180, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Reshmi Kabab", price: 290, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Chicken Tikka", price: 260, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Hariyali Kabab", price: 280, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Malai Kabab", price: 295, category: "Tandoori, Grill & Al-Faham" },
+            { name: "Chicken Curry", price: 170, category: "Main Course" },
+            { name: "Chicken Masala", price: 190, category: "Main Course" },
+            { name: "Butter Chicken Masala", price: 245, category: "Main Course" },
+            { name: "Chicken Chettinadu", price: 210, category: "Main Course" },
+            { name: "Chicken Punjabi", price: 260, category: "Main Course" },
+            { name: "Chicken Hyderabad", price: 280, category: "Main Course" },
+            { name: "Mughalai Chicken", price: 290, category: "Main Course" },
+            { name: "Jamaliya Chicken", price: 310, category: "Main Course" },
+            { name: "Mutton Masala", price: 270, category: "Main Course" },
+            { name: "Mutton Chettinadu", price: 295, category: "Main Course" },
+            { name: "Mutton Roast", price: 320, category: "Main Course" },
+            { name: "Mutton Kurma", price: 320, category: "Main Course" },
+            { name: "Mutton Rogan Josh", price: 340, category: "Main Course" },
+            { name: "Mutton Paya", price: 270, category: "Main Course" },
+            { name: "Mutton Keema", price: 295, category: "Main Course" },
+            { name: "Brain Pepper Fry", price: 290, category: "Main Course" },
+            { name: "Lamb Liver Fry", price: 345, category: "Main Course" },
+            { name: "Fish Curry", price: 220, category: "Main Course" },
+            { name: "Fish Masala", price: 250, category: "Main Course" },
+            { name: "Fish Fry", price: 225, category: "Main Course" },
+            { name: "SPL Fish Fry", price: 285, category: "Main Course" },
+            { name: "Prawn Masala", price: 290, category: "Main Course" },
+            { name: "Prawn Pepper Fry", price: 310, category: "Main Course" },
+            { name: "Crab Pepper Masala", price: 300, category: "Main Course" },
+            { name: "Paneer Butter Masala", price: 190, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Paneer Tikka Masala", price: 220, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Mushroom Masala", price: 180, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Gobi Masala", price: 180, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Mixed Veg Curry", price: 150, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Gobi 65", price: 150, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Mushroom 65", price: 170, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Veg Pulav", price: 180, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Ghee Rice", price: 180, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Chicken Ghee Rice", price: 310, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Mutton Ghee Rice", price: 370, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Jeera Rice", price: 170, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Veg Fried Rice", price: 170, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Schezwan Veg Fried Rice", price: 170, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Veg Noodles", price: 190, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Egg Noodles", price: 180, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Chicken Noodles", price: 190, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Mutton Noodles", price: 290, category: "Veg Specialties, Rice & Noodles" },
+            { name: "Wheat Parotta", price: 40, category: "Breads & Eggs" },
+            { name: "Maida Parotta", price: 30, category: "Breads & Eggs" },
+            { name: "Egg Kothu Parotta", price: 180, category: "Breads & Eggs" },
+            { name: "Ceylon Egg Parotta", price: 190, category: "Breads & Eggs" },
+            { name: "Ceylon Chicken Parotta", price: 220, category: "Breads & Eggs" },
+            { name: "Ceylon Mutton Parotta", price: 310, category: "Breads & Eggs" },
+            { name: "Naan", price: 50, category: "Breads & Eggs" },
+            { name: "Butter Naan", price: 60, category: "Breads & Eggs" },
+            { name: "Garlic Naan", price: 75, category: "Breads & Eggs" },
+            { name: "Kashmiri Naan", price: 90, category: "Breads & Eggs" },
+            { name: "Omelette", price: 20, category: "Breads & Eggs" },
+            { name: "Masala Omelette", price: 60, category: "Breads & Eggs" },
+            { name: "Egg Podimass", price: 95, category: "Breads & Eggs" },
+            { name: "Egg Buriji", price: 95, category: "Breads & Eggs" },
+            { name: "Fresh Lime Juice", price: 55, category: "Juices, Shakes & Desserts" },
+            { name: "Pineapple Juice", price: 95, category: "Juices, Shakes & Desserts" },
+            { name: "Mango Juice", price: 95, category: "Juices, Shakes & Desserts" },
+            { name: "Apple Juice", price: 145, category: "Juices, Shakes & Desserts" },
+            { name: "Maadulai Juice", price: 145, category: "Juices, Shakes & Desserts" },
+            { name: "Vanilla Shake", price: 160, category: "Juices, Shakes & Desserts" },
+            { name: "Strawberry Shake", price: 160, category: "Juices, Shakes & Desserts" },
+            { name: "Sharjah Milk Shake", price: 220, category: "Juices, Shakes & Desserts" },
+            { name: "Falooda", price: 190, category: "Juices, Shakes & Desserts" },
+            { name: "Fruit Salad", price: 180, category: "Juices, Shakes & Desserts" },
+            { name: "Caramel Pudding", price: 195, category: "Juices, Shakes & Desserts" }
+        ];
+
+        function injectAdditionalMenuCatalog() {
+            ADDITIONAL_MENU_ITEMS.forEach(function(item) {
+                if (!menuItems[item.name]) {
+                    menuItems[item.name] = item.price;
+                }
+
+                if (!defaultInventory[item.name]) {
+                    defaultInventory[item.name] = {
+                        currentStock: 60,
+                        unit: 'plates',
+                        lowThreshold: 15,
+                        criticalThreshold: 5,
+                        category: item.category
+                    };
+                }
+            });
+        }
+
+        function captureFullMenuCatalog() {
+            fullMenuCatalog = { ...menuItems };
+        }
+
+        function ensureMenuNotEmpty() {
+            const renderedCount = document.querySelectorAll('.menu-item').length;
+            if (renderedCount > 0) return;
+
+            console.warn('No menu items found after load. Recovering full catalog.');
+            localStorage.removeItem('removedMenuItems');
+
+            Object.keys(fullMenuCatalog).forEach(function(itemName) {
+                menuItems[itemName] = fullMenuCatalog[itemName];
+                const category = (inventory[itemName] && inventory[itemName].category) ||
+                    (defaultInventory[itemName] && defaultInventory[itemName].category) ||
+                    'Other';
+                renderNewMenuItem(itemName, menuItems[itemName], category);
+            });
+
+            updateStockDisplay();
+            initCategoryFilters();
+            applyMenuSearchAndFilters();
+        }
+
+        function restoreFullMenu() {
+            localStorage.removeItem('removedMenuItems');
+            setTimeout(function() {
+                window.location.reload();
+            }, 50);
+        }
+
+        function getDishImageUrl(itemName, category) {
+            const query = encodeURIComponent(`${itemName} ${category || ''} food dish`);
+            return `https://source.unsplash.com/800x520/?${query}`;
+        }
+
+        function hydrateMenuCardsWithImages() {
+            const cards = document.querySelectorAll('.menu-item');
+            cards.forEach(function(card) {
+                if (card.querySelector('.dish-image-wrap')) return;
+
+                const itemName = card.getAttribute('data-name') || 'Dish';
+                const category = card.getAttribute('data-category') ||
+                    (card.closest('.category')?.querySelector('.category-title')?.textContent || 'Food');
+
+                const imageWrap = document.createElement('div');
+                imageWrap.className = 'dish-image-wrap';
+
+                const image = document.createElement('img');
+                image.className = 'dish-image';
+                image.loading = 'lazy';
+                image.alt = itemName;
+                image.src = getDishImageUrl(itemName, category);
+
+                imageWrap.appendChild(image);
+                card.insertBefore(imageWrap, card.firstChild);
+            });
+        }
+
+        function resetMenuVisibilityState() {
+            document.querySelectorAll('.menu-item, .category').forEach(function(el) {
+                el.classList.remove('filtered-out');
+                el.style.display = '';
+                el.style.opacity = '';
+                el.style.transform = '';
+            });
+        }
 
         // ===================================
         // INVENTORY FUNCTIONS
@@ -730,6 +1021,16 @@
             
             document.getElementById('total-items').textContent = totalItems;
             document.getElementById('total-amount').textContent = totalAmount;
+
+            // Also update drawer totals if open
+            const drawerTotalItems = document.getElementById('drawer-total-items');
+            if (drawerTotalItems) drawerTotalItems.textContent = totalItems;
+            const drawerTotalAmount = document.getElementById('drawer-total-amount');
+            if (drawerTotalAmount) drawerTotalAmount.textContent = totalAmount;
+
+            // Show/hide cart bar based on items
+            const bar = document.getElementById('cart-bar');
+            if (bar) bar.style.display = totalItems > 0 ? 'flex' : 'none';
         }
 
         function updateStockDisplay() {
@@ -783,53 +1084,79 @@
         }
 
         // ===================================
-        // CHECKOUT FUNCTIONS
+        // SWIGGY-STYLE CART DRAWER
         // ===================================
-        function openCheckout() {
-            if (Object.keys(cart).length === 0) {
-                alert('Your cart is empty!');
+        function openCartDrawer() {
+            renderCartDrawer();
+            document.getElementById('cart-drawer').classList.add('open');
+            document.getElementById('cart-drawer-overlay').classList.add('open');
+        }
+
+        function closeCartDrawer() {
+            document.getElementById('cart-drawer').classList.remove('open');
+            document.getElementById('cart-drawer-overlay').classList.remove('open');
+        }
+
+        function renderCartDrawer() {
+            const container = document.getElementById('cart-drawer-items');
+            const emptyMsg = document.getElementById('cart-empty-msg');
+            const footer = document.getElementById('cart-drawer-footer');
+            container.innerHTML = '';
+
+            const items = Object.keys(cart);
+            if (items.length === 0) {
+                emptyMsg.style.display = 'block';
+                footer.style.display = 'none';
                 return;
             }
-            
-            const cartItemsContainer = document.getElementById('cart-items');
-            cartItemsContainer.innerHTML = '';
-            
-            let totalQuantity = 0;
+            emptyMsg.style.display = 'none';
+            footer.style.display = 'block';
+
+            let totalQty = 0;
             let grandTotal = 0;
-            
-            for (const itemName in cart) {
+
+            items.forEach(function(itemName) {
                 const item = cart[itemName];
-                const itemTotal = item.quantity * item.price;
-                totalQuantity += item.quantity;
-                grandTotal += itemTotal;
-                
-                const cartItemElement = document.createElement('div');
-                cartItemElement.className = 'cart-item';
-                cartItemElement.innerHTML = `
-                    <div class="cart-item-info">
-                        <div class="cart-item-name">${itemName}</div>
-                        <div class="cart-item-details">${item.quantity} × ₹${item.price} = ₹${itemTotal}</div>
+                const lineTotal = item.quantity * item.price;
+                totalQty += item.quantity;
+                grandTotal += lineTotal;
+
+                const row = document.createElement('div');
+                row.className = 'drawer-cart-item';
+                row.innerHTML = `
+                    <div class="drawer-item-info">
+                        <span class="drawer-item-name">${itemName}</span>
+                        <span class="drawer-item-price">₹${item.price}</span>
                     </div>
-                    <div class="cart-item-total">₹${itemTotal}</div>
+                    <div class="drawer-item-controls">
+                        <button class="drawer-btn-minus" onclick="drawerChangeQty('${itemName.replace(/'/g, "\\'")}', -1)">−</button>
+                        <span class="drawer-item-qty">${item.quantity}</span>
+                        <button class="drawer-btn-plus" onclick="drawerChangeQty('${itemName.replace(/'/g, "\\'")}', 1)">+</button>
+                    </div>
+                    <span class="drawer-item-total">₹${lineTotal}</span>
                 `;
-                cartItemsContainer.appendChild(cartItemElement);
-            }
-            
-            document.getElementById('checkout-total-items').textContent = totalQuantity;
-            document.getElementById('checkout-total-amount').textContent = grandTotal;
-            document.getElementById('checkout-modal').classList.add('active');
+                container.appendChild(row);
+            });
+
+            document.getElementById('drawer-total-items').textContent = totalQty;
+            document.getElementById('drawer-total-amount').textContent = grandTotal;
         }
 
-        function closeCheckout() {
-            document.getElementById('checkout-modal').classList.remove('active');
+        function drawerChangeQty(itemName, delta) {
+            updateQuantity(itemName, delta);
+            renderCartDrawer();
         }
+
+        // Keep legacy names working
+        function openCheckout() { openCartDrawer(); }
+        function closeCheckout() { closeCartDrawer(); }
 
         async function confirmOrder() {
-            const esp32IP = document.getElementById('esp32-ip').value.trim();
+            const backendUrl = document.getElementById('backend-url').value.trim();
             const tableNumber = document.getElementById('table-number').value;
             
-            if (!esp32IP) {
-                alert('Please enter ESP32 IP address!');
+            if (!backendUrl) {
+                alert('Please enter backend server URL!');
                 return;
             }
             
@@ -839,19 +1166,17 @@
             }
             
             const orderData = prepareOrderData(tableNumber);
+            orderData.id = `ORD-${Date.now()}`;
             closeCheckout();
             
             try {
-                await sendOrderToESP32(esp32IP, orderData);
+                await sendOrderToBackend(backendUrl, orderData);
                 processOrder(orderData);
-                showConfirmation(orderData);
                 clearCart();
+                openPaymentModal(orderData);
             } catch (error) {
                 console.error('Order error:', error);
-                alert('Note: Could not connect to ESP32, but order saved locally.');
-                processOrder(orderData);
-                showConfirmation(orderData);
-                clearCart();
+                alert('Could not reach backend server. Order was not sent to kitchen display. Check backend URL and try again.');
             }
         }
 
@@ -876,29 +1201,29 @@
             };
         }
 
-        async function sendOrderToESP32(esp32IP, orderData) {
-            const url = `http://${esp32IP}/order`;
+        async function sendOrderToBackend(backendUrl, orderData) {
+            const url = `${backendUrl.replace(/\/$/, '')}/api/orders`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(orderData),
-                timeout: 5000
+                body: JSON.stringify(orderData)
             });
             
-            if (!response.ok) throw new Error('ESP32 connection failed');
+            if (!response.ok) throw new Error('Backend server connection failed');
             return await response.json();
         }
 
         function processOrder(orderData) {
             deductStock(cart);
             saveOrderToHistory(orderData);
+            refreshMostOrderedHighlights();
             
             // Save to Firebase with detailed metadata
             if (typeof saveDetailedOrderToFirebase === 'function') {
                 try {
                     const metadata = {
-                        paymentMethod: 'cash',
-                        status: 'completed',
+                        paymentMethod: 'upi',
+                        status: 'pending_payment',
                         staffName: 'online-system'
                     };
                     saveDetailedOrderToFirebase(orderData, metadata);
@@ -926,6 +1251,9 @@
             orderData.items.forEach(item => {
                 itemsList += `${item.name} × ${item.qty}\n`;
             });
+            const paymentInfo = orderData.payment
+                ? `\nPayment Ref: ${orderData.payment.paymentRef}\nPayer: ${orderData.payment.payerName}`
+                : '';
             
             detailsElement.textContent = `
 Table: ${orderData.table}
@@ -934,8 +1262,10 @@ Time: ${orderData.time}
 Items:
 ${itemsList}
 Total: ₹${orderData.total}
+${paymentInfo}
 
 ✓ Order sent to kitchen display!
+✓ Bill PDF downloaded successfully.
             `.trim();
             
             document.getElementById('confirmation-modal').classList.add('active');
@@ -945,24 +1275,182 @@ Total: ₹${orderData.total}
             document.getElementById('confirmation-modal').classList.remove('active');
         }
 
+        function openPaymentModal(orderData) {
+            pendingPaymentOrder = {
+                ...orderData,
+                orderId: orderData.id || `ORD-${Date.now()}`,
+                createdAt: new Date().toISOString()
+            };
+
+            const amount = Number(orderData.total || 0);
+            const upiLink = `upi://pay?pa=${encodeURIComponent(PAYMENT_CONFIG.upiId)}&pn=${encodeURIComponent(PAYMENT_CONFIG.payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(pendingPaymentOrder.orderId)}`;
+            const qrImage = document.getElementById('payment-qr-image');
+            const upiText = document.getElementById('payment-upi-text');
+            const summary = document.getElementById('payment-order-summary');
+
+            if (qrImage) {
+                if (PAYMENT_CONFIG.qrImagePath) {
+                    qrImage.src = PAYMENT_CONFIG.qrImagePath;
+                } else {
+                    qrImage.src = `${PAYMENT_CONFIG.baseQrUrl}${encodeURIComponent(upiLink)}`;
+                }
+            }
+            if (upiText) {
+                upiText.textContent = `${PAYMENT_CONFIG.payeeName} (${PAYMENT_CONFIG.upiId})`;
+            }
+            if (summary) {
+                const itemsText = (orderData.items || []).map(function(item) {
+                    return `<li>${item.name} x ${item.qty}</li>`;
+                }).join('');
+
+                summary.innerHTML = `
+                    <p><strong>Order:</strong> ${pendingPaymentOrder.orderId}</p>
+                    <p><strong>Table:</strong> ${orderData.table}</p>
+                    <p><strong>Time:</strong> ${orderData.time}</p>
+                    <ul>${itemsText}</ul>
+                    <p class="payment-total"><strong>Total: Rs ${amount}</strong></p>
+                `;
+            }
+
+            const currentEmail = (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser)
+                ? firebase.auth().currentUser.email
+                : '';
+
+            const nameField = document.getElementById('payment-payer-name');
+            const emailField = document.getElementById('payment-payer-email');
+            const refField = document.getElementById('payment-ref');
+
+            if (nameField) nameField.value = '';
+            if (emailField) emailField.value = currentEmail || '';
+            if (refField) refField.value = '';
+
+            document.getElementById('payment-modal').classList.add('active');
+        }
+
+        function closePaymentModal() {
+            const modal = document.getElementById('payment-modal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        async function verifyPaymentAndGenerateBill() {
+            if (!pendingPaymentOrder) {
+                alert('No order found for payment.');
+                return;
+            }
+
+            const payerName = document.getElementById('payment-payer-name').value.trim();
+            const payerEmail = document.getElementById('payment-payer-email').value.trim();
+            const paymentRef = document.getElementById('payment-ref').value.trim();
+
+            if (!payerName || !payerEmail || !paymentRef) {
+                alert('Please complete payment authentication details.');
+                return;
+            }
+
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailPattern.test(payerEmail)) {
+                alert('Please enter a valid payer email.');
+                return;
+            }
+
+            const billData = {
+                ...pendingPaymentOrder,
+                payment: {
+                    payerName: payerName,
+                    payerEmail: payerEmail,
+                    paymentRef: paymentRef,
+                    method: 'UPI',
+                    paidAt: new Date().toISOString()
+                }
+            };
+
+            if (typeof markOrderPaymentInFirebase === 'function') {
+                try {
+                    await markOrderPaymentInFirebase(billData.orderId, billData.payment);
+                } catch (error) {
+                    console.warn('Payment audit sync failed:', error);
+                }
+            }
+
+            generateBillPDF(billData);
+            closePaymentModal();
+            showConfirmation(billData);
+            pendingPaymentOrder = null;
+        }
+
+        function generateBillPDF(order) {
+            if (!window.jspdf || !window.jspdf.jsPDF) {
+                alert('PDF generator not available. Please refresh and try again.');
+                return;
+            }
+
+            const doc = new window.jspdf.jsPDF();
+            let y = 20;
+
+            doc.setFontSize(18);
+            doc.text('Kitchen Alert - Bill Receipt', 14, y);
+            y += 10;
+
+            doc.setFontSize(11);
+            doc.text(`Order ID: ${order.orderId || 'N/A'}`, 14, y);
+            y += 7;
+            doc.text(`Table: ${order.table || 'N/A'}`, 14, y);
+            y += 7;
+            doc.text(`Order Time: ${order.time || ''}`, 14, y);
+            y += 7;
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, y);
+            y += 10;
+
+            doc.setFontSize(12);
+            doc.text('Items', 14, y);
+            y += 7;
+
+            (order.items || []).forEach(function(item) {
+                const unitPrice = menuItems[item.name] || 0;
+                const line = `${item.name}  x${item.qty}  @ Rs ${unitPrice}  = Rs ${unitPrice * item.qty}`;
+                doc.setFontSize(10);
+                doc.text(line.substring(0, 95), 14, y);
+                y += 6;
+            });
+
+            y += 4;
+            doc.setFontSize(12);
+            doc.text(`Grand Total: Rs ${order.total || 0}`, 14, y);
+            y += 8;
+
+            doc.setFontSize(11);
+            doc.text(`Paid By: ${order.payment?.payerName || 'N/A'}`, 14, y);
+            y += 6;
+            doc.text(`Payer Email: ${order.payment?.payerEmail || 'N/A'}`, 14, y);
+            y += 6;
+            doc.text(`Payment Ref: ${order.payment?.paymentRef || 'N/A'}`, 14, y);
+            y += 6;
+            doc.text(`Payment Method: ${order.payment?.method || 'UPI'}`, 14, y);
+
+            const fileName = `bill_${order.orderId || Date.now()}.pdf`;
+            doc.save(fileName);
+        }
+
         async function testConnection() {
-            const esp32IP = document.getElementById('esp32-ip').value.trim();
+            const backendUrl = document.getElementById('backend-url').value.trim();
             const statusElement = document.getElementById('connection-status');
             
-            if (!esp32IP) {
-                statusElement.textContent = '❌ Please enter IP address';
+            if (!backendUrl) {
+                statusElement.textContent = '❌ Please enter backend URL';
                 statusElement.className = 'error';
                 return;
             }
             
-            statusElement.textContent = '🔄 Testing...';
+            statusElement.textContent = '🔄 Testing backend...';
             statusElement.className = '';
             
             try {
-                const response = await fetch(`http://${esp32IP}/test`, { timeout: 5000 });
+                const response = await fetch(`${backendUrl.replace(/\/$/, '')}/api/health`);
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 
-                statusElement.textContent = '✅ Connection successful!';
+                statusElement.textContent = '✅ Backend connected. ESP8266 can now pull orders.';
                 statusElement.className = 'success';
                 
                 setTimeout(() => {
@@ -981,14 +1469,18 @@ Total: ₹${orderData.total}
         function saveOrderToHistory(orderData) {
             const orders = JSON.parse(localStorage.getItem('orderHistory') || '[]');
             const order = {
-                id: Date.now(),
+                id: orderData.id || Date.now(),
+                orderId: orderData.id || `ORD-${Date.now()}`,
                 timestamp: new Date().toISOString(),
                 table: orderData.table,
                 items: orderData.items,
                 total: orderData.total,
                 time: orderData.time,
                 date: new Date().toLocaleDateString(),
-                hour: new Date().getHours()
+                hour: new Date().getHours(),
+                paymentMethod: 'upi',
+                paymentStatus: 'pending_payment',
+                payment: null
             };
             orders.push(order);
             localStorage.setItem('orderHistory', JSON.stringify(orders));
@@ -1070,6 +1562,7 @@ Total: ₹${orderData.total}
         // INVENTORY DASHBOARD
         // ===================================
         function openInventoryDashboard() {
+            if (!requireStaffAccess('Inventory management')) return;
             try {
                 updateInventoryDashboard();
                 const modal = document.getElementById('inventory-modal');
@@ -1172,6 +1665,7 @@ Total: ₹${orderData.total}
         }
 
         function openStockAdjust(itemName) {
+            if (!requireStaffAccess('Stock adjustment')) return;
             const item = inventory[itemName];
             document.getElementById('adjust-item-name').textContent = itemName;
             document.getElementById('adjust-current-stock').textContent = `Current: ${item.currentStock} ${item.unit}`;
@@ -1185,6 +1679,7 @@ Total: ₹${orderData.total}
         }
 
         function applyStockAdjustment() {
+            if (!requireStaffAccess('Stock adjustment')) return;
             const itemName = document.getElementById('adjust-modal').getAttribute('data-item');
             const action = document.querySelector('input[name="adjust-action"]:checked').value;
             const quantity = parseInt(document.getElementById('adjust-quantity').value);
@@ -1208,10 +1703,12 @@ Total: ₹${orderData.total}
         }
 
         function quickAddStock(itemName, quantity) {
+            if (!requireStaffAccess('Stock adjustment')) return;
             addStock(itemName, quantity);
         }
 
         function quickRemoveStock(itemName, quantity) {
+            if (!requireStaffAccess('Stock adjustment')) return;
             const item = inventory[itemName];
             if (!item) return;
             const newStock = Math.max(0, item.currentStock - quantity);
@@ -1235,6 +1732,7 @@ Total: ₹${orderData.total}
 
         function removeMenuItem(itemName, options) {
             const settings = options || {};
+            if (!settings.bypassRoleCheck && !requireStaffAccess('Menu management')) return;
             const skipConfirm = settings.skipConfirm === true;
             const persist = settings.persist !== false;
 
@@ -1278,11 +1776,12 @@ Total: ₹${orderData.total}
             const removedItems = getRemovedMenuItems();
             if (removedItems.length === 0) return;
             removedItems.forEach(function(itemName) {
-                removeMenuItem(itemName, { skipConfirm: true, persist: false });
+                removeMenuItem(itemName, { skipConfirm: true, persist: false, bypassRoleCheck: true });
             });
         }
 
         function resetInventory() {
+            if (!requireStaffAccess('Inventory reset')) return;
             if (confirm('Are you sure you want to reset all inventory to default values?')) {
                 inventory = {};
                 for (const itemName in defaultInventory) {
@@ -1296,6 +1795,7 @@ Total: ₹${orderData.total}
         }
 
         function exportInventory() {
+            if (!requireStaffAccess('Inventory export')) return;
             const headers = [
                 'item',
                 'currentStock',
@@ -1339,6 +1839,7 @@ Total: ₹${orderData.total}
         // ADD NEW MENU ITEM
         // ===================================
         function openAddNewItem() {
+            if (!requireStaffAccess('Menu management')) return;
             var modal = document.getElementById('add-item-modal');
             modal.classList.add('active');
             var form = document.getElementById('new-item-form');
@@ -1392,6 +1893,7 @@ Total: ₹${orderData.total}
             menuItem.className = 'menu-item';
             menuItem.setAttribute('data-name', itemName);
             menuItem.setAttribute('data-price', price);
+            menuItem.setAttribute('data-category', category || 'Other');
             menuItem.innerHTML = `
                 <div class="item-info">
                     <span class="item-name">${itemName}</span>
@@ -1431,6 +1933,7 @@ Total: ₹${orderData.total}
         }
 
         function addNewMenuItem() {
+            if (!requireStaffAccess('Menu management')) return;
             const name = document.getElementById('new-item-name').value.trim();
             const price = parseFloat(document.getElementById('new-item-price').value);
             const category = document.getElementById('new-item-category').value;
@@ -1473,6 +1976,7 @@ Total: ₹${orderData.total}
         // ANALYTICS DASHBOARD
         // ===================================
         function openAnalyticsDashboard() {
+            if (!requireStaffAccess('Analytics')) return;
             try {
                 const modal = document.getElementById('analytics-modal');
                 if (modal) {
@@ -1719,6 +2223,7 @@ Total: ₹${orderData.total}
         }
 
         function exportAnalyticsReport() {
+            if (!requireStaffAccess('Analytics export')) return;
             const period = document.querySelector('.analytics-filter-btn.active')?.getAttribute('data-period') || 'today';
             let orders = [];
             
@@ -1777,12 +2282,275 @@ Total: ₹${orderData.total}
         }
 
         function clearOrderHistory() {
+            if (!requireStaffAccess('Order history clearing')) return;
             if (confirm('Are you sure you want to delete ALL order history? This cannot be undone!')) {
                 localStorage.removeItem('orderHistory');
                 alert('Order history cleared successfully!');
                 updateAnalyticsDashboard('today');
+                refreshMostOrderedHighlights();
             }
         }
+
+        // ===================================
+        // STAFF ORDER MANAGEMENT
+        // ===================================
+        function openOrderManagement() {
+            if (!requireStaffAccess('Order management')) return;
+            document.getElementById('order-mgmt-modal').classList.add('active');
+            loadOrderManagement();
+        }
+
+        function closeOrderManagement() {
+            document.getElementById('order-mgmt-modal').classList.remove('active');
+        }
+
+        function loadOrderManagement() {
+            const orders = getAllOrders().reverse();
+            const container = document.getElementById('order-mgmt-list');
+            container.innerHTML = '';
+
+            if (orders.length === 0) {
+                container.innerHTML = '<p class="order-mgmt-empty">No orders yet.</p>';
+                return;
+            }
+
+            orders.forEach(function(order, idx) {
+                const realIdx = orders.length - 1 - idx;
+                const card = document.createElement('div');
+                card.className = 'order-mgmt-card';
+                const itemsHtml = (order.items || []).map(function(it, itIdx) {
+                    return `<div class="mgmt-item-row" data-order-idx="${realIdx}" data-item-idx="${itIdx}">
+                        <span class="mgmt-item-name">${it.name || it.item}</span>
+                        <span class="mgmt-item-qty">×${it.quantity}</span>
+                        <span class="mgmt-item-price">₹${(it.quantity || 1) * (it.price || 0)}</span>
+                        <button class="mgmt-btn-edit" onclick="editOrderItem(${realIdx}, ${itIdx})">✏️</button>
+                        <button class="mgmt-btn-delete" onclick="deleteOrderItem(${realIdx}, ${itIdx})">🗑️</button>
+                    </div>`;
+                }).join('');
+
+                card.innerHTML = `
+                    <div class="order-mgmt-header">
+                        <strong>${order.orderId || 'ORD-' + (order.id || '?')}</strong>
+                        <span class="mgmt-table">Table ${order.table || '-'}</span>
+                        <span class="mgmt-time">${order.time || ''} &middot; ${order.date || ''}</span>
+                        <span class="mgmt-total">₹${order.total || 0}</span>
+                        <button class="mgmt-btn-delete-order" onclick="deleteFullOrder(${realIdx})">Delete Order</button>
+                    </div>
+                    <div class="order-mgmt-items">${itemsHtml}</div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function editOrderItem(orderIdx, itemIdx) {
+            if (!requireStaffAccess('Order editing')) return;
+            const orders = getAllOrders();
+            if (!orders[orderIdx] || !orders[orderIdx].items[itemIdx]) return;
+            const item = orders[orderIdx].items[itemIdx];
+            const newQty = prompt('Edit quantity for ' + (item.name || item.item) + ':', item.quantity);
+            if (newQty === null) return;
+            const qty = parseInt(newQty, 10);
+            if (isNaN(qty) || qty < 0) { alert('Invalid quantity.'); return; }
+
+            if (qty === 0) {
+                orders[orderIdx].items.splice(itemIdx, 1);
+            } else {
+                orders[orderIdx].items[itemIdx].quantity = qty;
+            }
+            // Recalculate total
+            let total = 0;
+            orders[orderIdx].items.forEach(function(it) {
+                total += (it.quantity || 1) * (it.price || 0);
+            });
+            orders[orderIdx].total = total;
+            localStorage.setItem('orderHistory', JSON.stringify(orders));
+            loadOrderManagement();
+        }
+
+        function deleteOrderItem(orderIdx, itemIdx) {
+            if (!requireStaffAccess('Order editing')) return;
+            const orders = getAllOrders();
+            if (!orders[orderIdx] || !orders[orderIdx].items[itemIdx]) return;
+            const item = orders[orderIdx].items[itemIdx];
+            if (!confirm('Remove ' + (item.name || item.item) + ' from this order?')) return;
+
+            orders[orderIdx].items.splice(itemIdx, 1);
+            let total = 0;
+            orders[orderIdx].items.forEach(function(it) {
+                total += (it.quantity || 1) * (it.price || 0);
+            });
+            orders[orderIdx].total = total;
+            if (orders[orderIdx].items.length === 0) {
+                orders.splice(orderIdx, 1);
+            }
+            localStorage.setItem('orderHistory', JSON.stringify(orders));
+            loadOrderManagement();
+        }
+
+        function deleteFullOrder(orderIdx) {
+            if (!requireStaffAccess('Order deletion')) return;
+            if (!confirm('Delete this entire order?')) return;
+            const orders = getAllOrders();
+            orders.splice(orderIdx, 1);
+            localStorage.setItem('orderHistory', JSON.stringify(orders));
+            loadOrderManagement();
+        }
+
+        function initCategoryFilters() {
+            const filterHost = document.getElementById('category-filters');
+            if (!filterHost) return;
+
+            const categories = Array.from(document.querySelectorAll('.category-title')).map(function(title) {
+                return title.textContent.trim();
+            });
+
+            const uniq = Array.from(new Set(categories));
+            filterHost.innerHTML = '';
+
+            const allBtn = document.createElement('button');
+            allBtn.className = 'filter-tab active';
+            allBtn.textContent = 'All';
+            allBtn.setAttribute('data-filter', 'all');
+            allBtn.onclick = function() {
+                activeCategoryFilter = 'all';
+                setActiveFilterButton('all');
+                applyMenuSearchAndFilters();
+            };
+            filterHost.appendChild(allBtn);
+
+            uniq.forEach(function(category) {
+                const btn = document.createElement('button');
+                btn.className = 'filter-tab';
+                btn.textContent = category;
+                btn.setAttribute('data-filter', category);
+                btn.onclick = function() {
+                    activeCategoryFilter = category;
+                    setActiveFilterButton(category);
+                    applyMenuSearchAndFilters();
+                };
+                filterHost.appendChild(btn);
+            });
+        }
+
+        function setActiveFilterButton(filterValue) {
+            const buttons = document.querySelectorAll('.filter-tab');
+            buttons.forEach(function(btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-filter') === filterValue);
+            });
+        }
+
+        function applyMenuSearchAndFilters() {
+            const query = (document.getElementById('menu-search')?.value || '').trim().toLowerCase();
+            const categories = document.querySelectorAll('.category');
+
+            categories.forEach(function(categoryEl) {
+                const title = categoryEl.querySelector('.category-title')?.textContent?.trim() || '';
+                const categoryMatch = activeCategoryFilter === 'all' || title === activeCategoryFilter;
+                const items = categoryEl.querySelectorAll('.menu-item');
+                let visibleItems = 0;
+
+                items.forEach(function(itemEl) {
+                    const name = (itemEl.getAttribute('data-name') || '').toLowerCase();
+                    const matchSearch = !query || name.includes(query);
+                    const shouldShow = categoryMatch && matchSearch;
+                    itemEl.classList.toggle('filtered-out', !shouldShow);
+                    if (shouldShow) visibleItems += 1;
+                });
+
+                categoryEl.classList.toggle('filtered-out', visibleItems === 0);
+            });
+        }
+
+        async function refreshMostOrderedHighlights() {
+            const container = document.getElementById('most-ordered-list');
+            if (!container) return;
+
+            container.innerHTML = '<p class="most-loading">Loading highlights...</p>';
+
+            try {
+                let orders = [];
+                if (typeof fetchOrdersForPeriod === 'function') {
+                    const result = await fetchOrdersForPeriod('today');
+                    orders = (result && result.orders) ? result.orders : [];
+                } else if (typeof getTodayOrders === 'function') {
+                    orders = getTodayOrders();
+                }
+
+                const topItems = getTopSellingItems(orders).slice(0, 6);
+                if (topItems.length === 0) {
+                    container.innerHTML = '<p class="most-empty">No orders yet. Start placing orders to see highlights.</p>';
+                    return;
+                }
+
+                container.innerHTML = topItems.map(function(item, index) {
+                    return `
+                        <article class="highlight-card">
+                            <div class="rank">#${index + 1}</div>
+                            <div class="highlight-name">${item.name}</div>
+                            <div class="highlight-meta">${item.count} sold • Rs ${item.revenue}</div>
+                        </article>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.warn('Most ordered highlight refresh failed:', error);
+                container.innerHTML = '<p class="most-empty">Unable to load highlights right now.</p>';
+            }
+        }
+
+        function initParallaxEffects() {
+            const scene = document.querySelector('.parallax-scene');
+            if (!scene) return;
+
+            const layers = scene.querySelectorAll('.parallax-layer');
+            let mouseX = 0;
+            let mouseY = 0;
+            const updateLayers = function() {
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+                layers.forEach(function(layer) {
+                    const speed = parseFloat(layer.getAttribute('data-speed') || '0.1');
+                    const moveX = Math.round(mouseX * speed * 0.06);
+                    const moveY = Math.round(mouseY * speed * 0.06);
+                    layer.style.transform = `translate3d(${moveX}px, ${Math.round(scrollTop * speed) + moveY}px, 0)`;
+                });
+            };
+
+            const onMouseMove = function(event) {
+                const centerX = window.innerWidth / 2;
+                const centerY = window.innerHeight / 2;
+                mouseX = event.clientX - centerX;
+                mouseY = event.clientY - centerY;
+                updateLayers();
+            };
+
+            updateLayers();
+            window.addEventListener('scroll', updateLayers, { passive: true });
+            window.addEventListener('mousemove', onMouseMove, { passive: true });
+        }
+
+        function initSectionReveal() {
+            const targets = document.querySelectorAll('.header, .config-panel, .menu-container, .category, .cart-bar');
+            targets.forEach(function(el) {
+                el.classList.add('reveal-section');
+            });
+
+            if (!window.IntersectionObserver) {
+                targets.forEach(function(el) { el.classList.add('is-visible'); });
+                return;
+            }
+
+            const observer = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('is-visible');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.12 });
+
+            targets.forEach(function(el) { observer.observe(el); });
+        }
+
+        // Cinematic scroll removed — it was hiding menu items with opacity:0
 
         // ===================================
         // INITIALIZATION
@@ -1794,20 +2562,30 @@ Total: ₹${orderData.total}
             if (customItems) {
                 Object.assign(menuItems, JSON.parse(customItems));
             }
-            
+
+            injectAdditionalMenuCatalog();
+            captureFullMenuCatalog();
+
+            // Clear any old removed-items cache so the full menu always shows
+            localStorage.removeItem('removedMenuItems');
+
             initializeInventory();
-            applyRemovedMenuItems();
             
             // Render all custom items that were saved (this fixes the menu not showing custom items after refresh)
             renderAllCustomItems();
+            ensureMenuNotEmpty();
+            resetMenuVisibilityState();
+            initCategoryFilters();
             
-            const savedIP = localStorage.getItem('esp32-ip');
-            if (savedIP) {
-                document.getElementById('esp32-ip').value = savedIP;
+            const savedBackendUrl = localStorage.getItem('backend-url');
+            if (savedBackendUrl) {
+                document.getElementById('backend-url').value = savedBackendUrl;
+            } else {
+                document.getElementById('backend-url').value = APP_CONFIG.backendUrl;
             }
             
-            document.getElementById('esp32-ip').addEventListener('change', function() {
-                localStorage.setItem('esp32-ip', this.value);
+            document.getElementById('backend-url').addEventListener('change', function() {
+                localStorage.setItem('backend-url', this.value);
             });
             
             updateCartBar();
@@ -1831,14 +2609,36 @@ Total: ₹${orderData.total}
             'sharunandha21@gmail.com',
             'admin321@restaurant.com'
         ];
+        window.AUTHORIZED_EMAILS = AUTHORIZED_EMAILS;
 
-        function setAuthLocked(locked) {
+        function isAuthorizedStaff(email) {
+            return AUTHORIZED_EMAILS.includes((email || '').toLowerCase());
+        }
+
+        function requireStaffAccess(actionName) {
+            if (currentUserRole !== 'staff') {
+                alert(`${actionName} is available only for authorized staff accounts.`);
+                return false;
+            }
+            return true;
+        }
+
+        function applyRoleVisibility(role) {
+            const staffOnlyElements = document.querySelectorAll('.staff-only');
+            staffOnlyElements.forEach(function(element) {
+                element.style.display = role === 'staff' ? '' : 'none';
+            });
+        }
+
+        function setAuthState(user) {
             const overlay = document.getElementById('auth-overlay');
             const logoutBtn = document.getElementById('btn-logout');
             const status = document.getElementById('auth-status');
+            const roleBadge = document.getElementById('user-role-badge');
             const container = document.querySelector('.container');
 
-            if (locked) {
+            if (!user) {
+                currentUserRole = 'guest';
                 document.body.classList.add('auth-locked');
                 if (overlay) {
                     overlay.classList.remove('hidden');
@@ -1847,65 +2647,62 @@ Total: ₹${orderData.total}
                 if (container) container.style.display = 'none';
                 if (logoutBtn) logoutBtn.style.display = 'none';
                 if (status) status.textContent = 'Signed out';
-            } else {
-                document.body.classList.remove('auth-locked');
-                if (overlay) {
-                    overlay.classList.add('hidden');
-                    overlay.style.display = 'none';
+                if (roleBadge) {
+                    roleBadge.className = 'role-badge';
+                    roleBadge.textContent = '';
                 }
-                if (container) container.style.display = 'block';
-                if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-                if (status) status.textContent = 'Signed in';
+                applyRoleVisibility('guest');
+                return;
             }
+
+            currentUserRole = isAuthorizedStaff(user.email) ? 'staff' : 'customer';
+            document.body.classList.remove('auth-locked');
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.style.display = 'none';
+            }
+            if (container) container.style.display = 'block';
+            if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+            if (status) status.textContent = user.email || 'Signed in';
+            if (roleBadge) {
+                roleBadge.className = `role-badge role-${currentUserRole}`;
+                roleBadge.textContent = currentUserRole === 'staff' ? 'STAFF MODE' : 'CUSTOMER MODE';
+            }
+            applyRoleVisibility(currentUserRole);
+            // Re-render all menu items after login since container was hidden before
+            renderAllCustomItems();
+            updateStockDisplay();
+            resetMenuVisibilityState();
         }
 
         function initAuthUI() {
             if (typeof firebase === 'undefined' || !firebase.auth) {
                 setAuthMessage('Auth not ready. Please refresh the page.');
-                setAuthLocked(true);
+                setAuthState(null);
                 return;
             }
 
             // Force auth overlay to show initially
-            setAuthLocked(true);
+            setAuthState(null);
 
-            // Set persistence to NONE - require login each time page loads
-            firebase.auth().setPersistence(firebase.auth.Auth.Persistence.NONE).catch(function(error) {
+            firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(function(error) {
                 console.warn('Auth persistence error:', error);
-            }).then(function() {
-                // Sign out any existing session to force fresh login
-                firebase.auth().signOut().catch(function(error) {
-                    console.warn('Signout error:', error);
-                });
             });
 
             firebase.auth().onAuthStateChanged(function(user) {
-                if (user) {
-                    console.log('Auth state changed - User email:', user.email);
-                    console.log('Checking against whitelist:', AUTHORIZED_EMAILS);
+                if (!user) {
+                    setAuthState(null);
+                    return;
                 }
-                
-                if (user && AUTHORIZED_EMAILS.includes(user.email)) {
-                    // Authorized user - unlock access
-                    console.log('✅ Authorized user:', user.email);
-                    setAuthLocked(false);
-                    
-                    // Initialize Firebase sync now that user is authenticated
-                    if (typeof initFirebaseSync === 'function') {
-                        console.log('Initializing Firebase sync for authenticated user...');
+
+                setAuthState(user);
+
+                if (typeof initFirebaseSync === 'function') {
+                    try {
                         initFirebaseSync();
+                    } catch (error) {
+                        console.warn('Firebase sync init failed:', error);
                     }
-                } else if (user) {
-                    // Unauthorized user - sign them out and lock
-                    console.log('❌ Unauthorized user:', user.email);
-                    console.log('Email not in whitelist. Authorized emails:', AUTHORIZED_EMAILS);
-                    setAuthMessage('Email not authorized. Contact your restaurant admin.');
-                    firebase.auth().signOut();
-                    setAuthLocked(true);
-                } else {
-                    // No user - keep locked
-                    console.log('No authenticated user');
-                    setAuthLocked(true);
                 }
             });
         }
@@ -1919,19 +2716,22 @@ Total: ₹${orderData.total}
                 return;
             }
 
-            // Check whitelist before attempting login
-            if (!AUTHORIZED_EMAILS.includes(email)) {
-                setAuthMessage('Email not authorized. Contact your restaurant admin.');
-                return;
-            }
-
             setAuthMessage('Signing in...');
             firebase.auth().signInWithEmailAndPassword(email, password)
                 .then(function() {
                     setAuthMessage('');
                 })
                 .catch(function(error) {
-                    setAuthMessage(error.message);
+                    const code = error && error.code ? error.code : '';
+                    if (code === 'auth/invalid-login-credentials' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+                        setAuthMessage('Invalid email/password. In Firebase Console, enable Email/Password sign-in and create this user under Authentication > Users.');
+                    } else if (code === 'auth/invalid-email') {
+                        setAuthMessage('Invalid email format. Please check and try again.');
+                    } else if (code === 'auth/too-many-requests') {
+                        setAuthMessage('Too many attempts. Wait a few minutes and try again.');
+                    } else {
+                        setAuthMessage(error.message || 'Login failed. Please try again.');
+                    }
                 });
         }
 
@@ -1949,11 +2749,16 @@ Total: ₹${orderData.total}
         window.closeCheckout = closeCheckout;
         window.confirmOrder = confirmOrder;
         window.closeConfirmation = closeConfirmation;
+        window.closePaymentModal = closePaymentModal;
+        window.verifyPaymentAndGenerateBill = verifyPaymentAndGenerateBill;
         window.testConnection = testConnection;
         window.openInventoryDashboard = openInventoryDashboard;
         window.closeInventoryDashboard = closeInventoryDashboard;
         window.openAnalyticsDashboard = openAnalyticsDashboard;
         window.closeAnalyticsDashboard = closeAnalyticsDashboard;
+        window.applyMenuSearchAndFilters = applyMenuSearchAndFilters;
+        window.refreshMostOrderedHighlights = refreshMostOrderedHighlights;
+        window.restoreFullMenu = restoreFullMenu;
         window.openAddNewItem = openAddNewItem;
         window.closeAddNewItem = closeAddNewItem;
         window.addNewMenuItem = addNewMenuItem;
@@ -1972,6 +2777,15 @@ Total: ₹${orderData.total}
         window.updateAnalyticsDashboard = updateAnalyticsDashboard;
         window.exportAnalyticsReport = exportAnalyticsReport;
         window.clearOrderHistory = clearOrderHistory;
+        window.openOrderManagement = openOrderManagement;
+        window.closeOrderManagement = closeOrderManagement;
+        window.loadOrderManagement = loadOrderManagement;
+        window.editOrderItem = editOrderItem;
+        window.deleteOrderItem = deleteOrderItem;
+        window.deleteFullOrder = deleteFullOrder;
+        window.openCartDrawer = openCartDrawer;
+        window.closeCartDrawer = closeCartDrawer;
+        window.drawerChangeQty = drawerChangeQty;
         window.loginUser = loginUser;
         window.logoutUser = logoutUser;
 
@@ -2000,6 +2814,7 @@ Total: ₹${orderData.total}
             if (event.key === 'Escape') {
                 closeCheckout();
                 closeConfirmation();
+                closePaymentModal();
                 closeInventoryDashboard();
                 closeAnalyticsDashboard();
                 closeAddNewItem();

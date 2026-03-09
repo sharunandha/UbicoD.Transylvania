@@ -23,17 +23,70 @@
 ```
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{database}/documents {
-    match /restaurants/{restaurantId}/{document=**} {
-      allow read, write: if true;  // For development - add authentication later
+    match /databases/{database}/documents {
+        function signedIn() {
+            return request.auth != null;
+        }
+
+        function isStaff() {
+            return signedIn() && request.auth.token.email in [
+                'sharunandha21@gmail.com',
+                'admin321@restaurant.com'
+            ];
+        }
+
+        match /restaurants/main {
+            allow read: if signedIn();
+            allow write: if isStaff();
+        }
+
+        match /restaurants/main/orders/{orderId} {
+            allow read: if signedIn();
+            allow create, update: if signedIn();
+            allow delete: if isStaff();
+        }
+
+        match /restaurants/main/inventory/{docId} {
+            allow read: if signedIn();
+            allow write: if isStaff();
+        }
+
+        match /restaurants/main/menu/{docId} {
+            allow read: if signedIn();
+            allow write: if isStaff();
+        }
+
+        match /restaurants/main/analytics/{docId} {
+            allow read: if signedIn();
+            allow write: if isStaff();
+        }
+
+        match /restaurants/main/dailyAnalytics/{docId} {
+            allow read: if signedIn();
+            allow write: if isStaff();
+        }
+
+        match /restaurants/main/stockLogs/{docId} {
+            allow read: if signedIn();
+            allow write: if isStaff();
+        }
+
+        match /{document=**} {
+            allow read, write: if false;
+        }
     }
-  }
 }
 ```
 
 3. Click **Publish**
 
-> ⚠️ **Security Note**: The above allows anyone to access data. For production, add Firebase Authentication.
+Alternative: use the project file `firestore.rules` and deploy with Firebase CLI:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+> Security Note: The rules above allow order placement for all signed-in users, but restrict inventory/menu/analytics writes to authorized staff emails only.
 
 ## Step 4: Get Firebase Config
 

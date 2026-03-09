@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isStaff() {
+      return signedIn() && request.auth.token.email in [
+        'sharunandha21@gmail.com',
+        'admin321@restaurant.com'
+      ];
+    }
+
+    // Restaurant root document keeps inventory/menu snapshots.
+    match /restaurants/main {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // Orders: all signed-in users can place/read; only staff can delete.
+    match /restaurants/main/orders/{orderId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isStaff();
+    }
+
+    // Staff-only operational collections.
+    match /restaurants/main/inventory/{docId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    match /restaurants/main/menu/{docId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    match /restaurants/main/analytics/{docId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    match /restaurants/main/dailyAnalytics/{docId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    match /restaurants/main/stockLogs/{docId} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // Default deny for anything else.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -125,7 +125,7 @@ function syncInventoryToFirebase() {
     });
 
     restaurantRef.set({
-        name: 'Kitchen Alert Restaurant',
+        name: 'Ubico D. Transylvania',
         lastUpdated: new Date().toISOString(),
         inventory: sortedInventory.sorted,
         menuItems: sortedMenuItems,
@@ -148,33 +148,43 @@ function listenToFirebaseInventory() {
         if (doc.exists) {
             const data = doc.data();
             
-            // Update local inventory if Firebase has newer data
+            // MERGE remote inventory with local — never overwrite local catalog
             if (data.inventory) {
                 const remoteUpdated = data.lastUpdated ? Date.parse(data.lastUpdated) : 0;
                 const localUpdated = typeof lastLocalInventoryUpdate === 'number' ? lastLocalInventoryUpdate : 0;
 
                 if (!remoteUpdated || remoteUpdated >= localUpdated) {
-                    inventory = { ...data.inventory };
+                    // Merge: remote values update existing items, but local-only items are kept
+                    for (const itemName in data.inventory) {
+                        inventory[itemName] = data.inventory[itemName];
+                    }
+                    // Ensure every item from defaultInventory still exists
+                    if (typeof defaultInventory !== 'undefined') {
+                        for (const itemName in defaultInventory) {
+                            if (!inventory[itemName]) {
+                                inventory[itemName] = { ...defaultInventory[itemName], lastRestocked: new Date().toISOString() };
+                            }
+                        }
+                    }
                     saveInventory();
                     updateStockDisplay();
                     updateInventoryDashboard();
-                    console.log('📡 Inventory updated from Firebase');
+                    console.log('📡 Inventory merged from Firebase (' + Object.keys(inventory).length + ' items)');
                 }
             }
             
-            // Update menu items if changed by another user
+            // Merge menu items — add any remote items we don't have locally
             if (data.menuItems) {
                 const newItems = data.menuItems;
                 for (const itemName in newItems) {
                     if (!menuItems[itemName]) {
                         menuItems[itemName] = newItems[itemName];
-                        // Render the new item on the menu
                         if (inventory[itemName]) {
                             renderNewMenuItem(itemName, newItems[itemName], inventory[itemName].category);
                         }
                     }
                 }
-                console.log('📡 Menu items updated from Firebase');
+                console.log('📡 Menu items merged from Firebase');
             }
         }
     }, error => console.error('Error listening to Firebase:', error));
@@ -361,6 +371,9 @@ function initFirebaseSync() {
     firebaseSyncInitialized = true;
     console.log('🔥 Initializing Firebase sync...');
     
+    // Push the full local catalog to Firebase first so it has all items
+    syncInventoryToFirebase();
+    
     // Listen for real-time changes
     listenToFirebaseInventory();
     
@@ -544,6 +557,11 @@ async function saveDetailedOrderToFirebase(orderData, metadata = {}) {
             // Metadata
             paymentMethod: metadata.paymentMethod || 'cash',
             status: metadata.status || 'completed',
+            paymentStatus: metadata.status || 'completed',
+            paidAt: metadata.paidAt || null,
+            paymentRef: metadata.paymentRef || '',
+            payerName: metadata.payerName || '',
+            payerEmail: metadata.payerEmail || '',
             notes: metadata.notes || '',
             staffName: metadata.staffName || 'system',
             ipAddress: metadata.ipAddress || 'unknown'
@@ -568,6 +586,85 @@ async function saveDetailedOrderToFirebase(orderData, metadata = {}) {
         return true;
     } catch (error) {
         console.error('❌ Error saving detailed order:', error);
+        return false;
+    }
+}
+
+async function markOrderPaymentInFirebase(orderId, paymentData = {}) {
+    if (!db) {
+        console.warn('⚠️ Firebase not ready, cannot mark payment audit');
+        return false;
+    }
+
+    if (!orderId) {
+        console.warn('⚠️ Missing orderId for payment audit update');
+        return false;
+    }
+
+    try {
+        const ordersRef = db.collection('restaurants').doc('main').collection('orders');
+        const snapshot = await ordersRef.where('orderId', '==', orderId).get();
+
+        if (snapshot.empty) {
+            console.warn('⚠️ No matching order found for payment update:', orderId);
+            return false;
+        }
+
+        const updatePayload = {
+            paymentMethod: paymentData.method || 'UPI',
+            paymentStatus: 'paid',
+            status: 'completed',
+            paidAt: paymentData.paidAt || new Date().toISOString(),
+            paymentRef: paymentData.paymentRef || '',
+            payerName: paymentData.payerName || '',
+            payerEmail: paymentData.payerEmail || '',
+            paymentAudit: {
+                payerName: paymentData.payerName || '',
+                payerEmail: paymentData.payerEmail || '',
+                paymentRef: paymentData.paymentRef || '',
+                method: paymentData.method || 'UPI',
+                paidAt: paymentData.paidAt || new Date().toISOString()
+            },
+            lastUpdated: new Date().toISOString()
+        };
+
+        const updates = [];
+        snapshot.forEach((doc) => {
+            updates.push(doc.ref.update(updatePayload));
+        });
+        await Promise.all(updates);
+
+        // Keep local offline order history in sync with payment audit
+        try {
+            const orders = JSON.parse(localStorage.getItem('orderHistory') || '[]');
+            const updated = orders.map((order) => {
+                const localOrderId = order.orderId || order.id;
+                if (String(localOrderId) === String(orderId)) {
+                    return {
+                        ...order,
+                        paymentMethod: paymentData.method || 'UPI',
+                        paymentStatus: 'paid',
+                        status: 'completed',
+                        payment: {
+                            payerName: paymentData.payerName || '',
+                            payerEmail: paymentData.payerEmail || '',
+                            paymentRef: paymentData.paymentRef || '',
+                            method: paymentData.method || 'UPI',
+                            paidAt: paymentData.paidAt || new Date().toISOString()
+                        }
+                    };
+                }
+                return order;
+            });
+            localStorage.setItem('orderHistory', JSON.stringify(updated));
+        } catch (localError) {
+            console.warn('Local payment audit update failed:', localError);
+        }
+
+        console.log('✅ Payment audit saved to Firebase for order:', orderId);
+        return true;
+    } catch (error) {
+        console.error('❌ Error saving payment audit:', error);
         return false;
     }
 }
@@ -672,6 +769,7 @@ window.saveAnalyticsSnapshot = saveAnalyticsSnapshot;
 window.getAnalyticsSnapshots = getAnalyticsSnapshots;
 window.updateDailyAnalytics = updateDailyAnalytics;
 window.getDashboardAnalytics = getDashboardAnalytics;
+window.markOrderPaymentInFirebase = markOrderPaymentInFirebase;
 window.loginWithEmail = loginWithEmail;
 window.logout = logout;
 window.createUserAccount = createUserAccount;

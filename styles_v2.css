@@ -1,0 +1,230 @@
+/* Modern UI reset layer for Happy Ending Restaurant */
+:root {
+  --bg0: #f3efe7;
+  --bg1: #f9f6f0;
+  --ink: #1e232b;
+  --muted: #5d6674;
+  --brand: #111827;
+  --accent: #f97316;
+  --accent-2: #fb923c;
+  --card: #ffffff;
+}
+
+body {
+  font-family: 'Sora', sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at 0 0, #fff 0, var(--bg1) 35%, var(--bg0) 100%);
+}
+
+.container {
+  max-width: 1280px;
+  padding: 20px;
+}
+
+.header {
+  border-radius: 28px;
+  background: linear-gradient(135deg, #111827 0%, #1f2937 55%, #334155 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.55), rgba(249, 115, 22, 0));
+  right: -70px;
+  top: -70px;
+}
+
+.header h1 {
+  color: #fff;
+  font-family: 'Playfair Display', serif;
+}
+
+.subtitle { color: #e5e7eb; }
+
+.config-panel,
+.menu-container,
+.modal-content {
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+}
+
+.hero-welcome {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  background: linear-gradient(120deg, #fff 0%, #fff7ed 55%, #ffedd5 100%);
+}
+
+.hero-copy h2 {
+  color: #0f172a;
+  font-family: 'Playfair Display', serif;
+}
+
+.hero-tag {
+  background: #0f172a;
+}
+
+.dish-card {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+}
+
+.menu-tools {
+  border-radius: 16px;
+  background: #fff;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.filter-tab {
+  border: none;
+  background: #eef2ff;
+  color: #1f2937;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.filter-tab:hover { transform: translateY(-1px); }
+
+.filter-tab.active {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  color: white;
+}
+
+#menu-search {
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  background: #fff;
+}
+
+.most-ordered-panel {
+  border-radius: 20px;
+  background: linear-gradient(120deg, #fff, #f8fafc);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.most-ordered-head .btn-secondary {
+  border-radius: 12px;
+}
+
+.menu-grid {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.menu-item {
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+.dish-image-wrap {
+  position: relative;
+  height: 138px;
+  overflow: hidden;
+}
+
+.dish-image-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.24), rgba(0, 0, 0, 0));
+}
+
+.dish-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.03);
+  transition: transform 0.4s ease;
+}
+
+.menu-item:hover .dish-image {
+  transform: scale(1.12);
+}
+
+.item-info {
+  padding-top: 10px;
+}
+
+.item-name {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.item-price {
+  font-size: 1.1rem;
+  color: #ea580c;
+}
+
+.item-controls {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 6px;
+}
+
+.btn-minus,
+.btn-plus {
+  width: 34px;
+  height: 34px;
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-test,
+.btn-checkout,
+.btn-inventory,
+.btn-analytics {
+  border-radius: 14px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-test:hover,
+.btn-checkout:hover,
+.btn-inventory:hover,
+.btn-analytics:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+}
+
+.cart-bar {
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+}
+
+/* cinematic scroll removed — no longer needed */
+
+.parallax-scene {
+  opacity: 1;
+}
+
+.layer-food,
+.layer-light,
+.layer-grain {
+  filter: saturate(1.1);
+}
+
+@media (max-width: 820px) {
+  .hero-welcome {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dish-image-wrap {
+    height: 150px;
+  }
+}

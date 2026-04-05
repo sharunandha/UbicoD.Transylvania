@@ -1167,12 +1167,20 @@
             
             const orderData = prepareOrderData(tableNumber);
             orderData.id = `ORD-${Date.now()}`;
+            orderData.backendUrl = backendUrl;
             closeCheckout();
+
+            if (currentUserRole === 'customer') {
+                // Customer flow: collect payment first, then dispatch to kitchen.
+                openPaymentModal(orderData);
+                return;
+            }
             
             try {
                 await sendOrderToBackend(backendUrl, orderData);
                 processOrder(orderData);
                 clearCart();
+                orderData._alreadyProcessed = true;
                 openPaymentModal(orderData);
             } catch (error) {
                 console.error('Order error:', error);
@@ -1245,7 +1253,8 @@
             }
         }
 
-        function showConfirmation(orderData) {
+        function showConfirmation(orderData, options = {}) {
+            const backendSent = options.backendSent !== false;
             const detailsElement = document.getElementById('order-confirmation-details');
             let itemsList = '';
             orderData.items.forEach(item => {
@@ -1264,7 +1273,7 @@ ${itemsList}
 Total: ₹${orderData.total}
 ${paymentInfo}
 
-✓ Order sent to kitchen display!
+${backendSent ? '✓ Order sent to kitchen display!' : '⚠ Payment captured, but backend is offline. Order not sent to kitchen display yet.'}
 ✓ Bill PDF downloaded successfully.
             `.trim();
             
@@ -1366,6 +1375,21 @@ ${paymentInfo}
                 }
             };
 
+            let backendSent = true;
+            if (currentUserRole === 'customer') {
+                try {
+                    await sendOrderToBackend(billData.backendUrl, billData);
+                } catch (error) {
+                    backendSent = false;
+                    console.warn('Backend dispatch after payment failed:', error);
+                }
+            }
+
+            if (!billData._alreadyProcessed) {
+                processOrder(billData);
+                clearCart();
+            }
+
             if (typeof markOrderPaymentInFirebase === 'function') {
                 try {
                     await markOrderPaymentInFirebase(billData.orderId, billData.payment);
@@ -1376,7 +1400,7 @@ ${paymentInfo}
 
             generateBillPDF(billData);
             closePaymentModal();
-            showConfirmation(billData);
+            showConfirmation(billData, { backendSent: backendSent });
             pendingPaymentOrder = null;
         }
 

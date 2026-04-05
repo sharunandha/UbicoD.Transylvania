@@ -2723,8 +2723,24 @@ ${paymentInfo}
                 })
                 .catch(function(error) {
                     const code = error && error.code ? error.code : '';
-                    if (code === 'auth/invalid-login-credentials' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
-                        setAuthMessage('Invalid email/password. In Firebase Console, enable Email/Password sign-in and create this user under Authentication > Users.');
+                    if (code === 'auth/invalid-login-credentials' || code === 'auth/user-not-found') {
+                        // For non-staff users, auto-create a customer account on first login.
+                        firebase.auth().createUserWithEmailAndPassword(email, password)
+                            .then(function() {
+                                setAuthMessage('Customer account created. Signed in as customer mode.');
+                            })
+                            .catch(function(createError) {
+                                const createCode = createError && createError.code ? createError.code : '';
+                                if (createCode === 'auth/email-already-in-use' || createCode === 'auth/wrong-password') {
+                                    setAuthMessage('Invalid email/password. Please try again.');
+                                } else if (createCode === 'auth/weak-password') {
+                                    setAuthMessage('Password is too weak. Use at least 6 characters.');
+                                } else {
+                                    setAuthMessage(createError.message || 'Login failed. Please try again.');
+                                }
+                            });
+                    } else if (code === 'auth/wrong-password') {
+                        setAuthMessage('Invalid email/password. Please try again.');
                     } else if (code === 'auth/invalid-email') {
                         setAuthMessage('Invalid email format. Please check and try again.');
                     } else if (code === 'auth/too-many-requests') {
